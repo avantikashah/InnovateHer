@@ -7,7 +7,7 @@ app = Flask(__name__)
 CORS(app)
 
 # Initialize the Groq client
-groq_api_key = "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"
+groq_api_key = os.getenv("GROQ_API_KEY")
 client = Groq(api_key=groq_api_key)
 
 # Create an uploads folder
