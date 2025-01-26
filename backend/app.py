@@ -15,12 +15,8 @@ UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
-# Global variable to store the transcription text
-transcription_text = ""
-
 @app.route("/generate-notes", methods=["POST"])
 def generate_notes():
-    global transcription_text
     if "audio" not in request.files:
         return jsonify({"error": "No audio file found in the request"}), 400
 
@@ -33,20 +29,19 @@ def generate_notes():
     
     # Transcribe the audio and store the transcription text
     transcription_text = transcribe_audio(filename=audio_path)
-    
     # Generate the question and answer based on the transcription text
-    notes = give_notes()
+    notes = give_notes(transcription_text)
     return jsonify({"notes": notes})
 
-def give_notes():
-    global transcription_text
+def give_notes(transcription_text):
+    print("checker" + str(transcription_text))
     notes = client.chat.completions.create(
-        messages=[{"role":"user", "content":f"Generate notes for:{transcription_text}"}],
+        messages=[{"role":"user", "content":f"Generate notes for {transcription_text}"}],
         model="llama-3.3-70b-versatile",  # Use appropriate model
         temperature=0.7,
         max_tokens=150
     )
-    notes = notes.choices[0].message.content.strip()
+    notes = notes.choices[0].message.content
     return notes
 
 
@@ -54,8 +49,8 @@ def give_notes():
 @app.route("/generate-quizzes", methods=["POST"])
 def generate_quizzes():
     global transcription_text
-    if "audio" not in request.files:
-        return jsonify({"error": "No audio file found in the request"}), 400
+    #if "audio" not in request.files:
+        #return jsonify({"error": "No audio file found in the request"}), 400
 
     audio_file = request.files["audio"]
     audio_path = os.path.join(app.config["UPLOAD_FOLDER"], audio_file.filename)
@@ -68,7 +63,7 @@ def generate_quizzes():
     transcription_text = transcribe_audio(filename=audio_path)
     
     # Generate the question and answer based on the transcription text
-    question, answer = generate_mcq_one_by_one()
+    question, answer = generate_mcq_one_by_one(transcription_text)
 
     # Respond back with question and answer
     return jsonify({
@@ -79,7 +74,6 @@ def generate_quizzes():
     })
 
 def transcribe_audio(filename):
-    global transcription_text  # Use global to store the transcription text
     with open(filename, "rb") as file:
         # Create a transcription of the audio file
         transcription = client.audio.transcriptions.create(
@@ -92,6 +86,7 @@ def transcribe_audio(filename):
         )
         transcription_text = transcription.text
         print(f"Transcription: {transcription_text}")
+        return transcription_text
 
 @app.route("/next-question", methods=["GET"])
 def get_next_question():
@@ -99,17 +94,15 @@ def get_next_question():
     generate_mcq_one_by_one()
     return jsonify({"message": "Next question generated successfully"})
 
-def generate_mcq_one_by_one():
-    global transcription_text
-    
+def generate_mcq_one_by_one(transcription_text):
     # Step 1: Ask Groq for one MCQ based on the transcription
     question_response = client.chat.completions.create(
-        messages=[{"role":"user", "content":f"Generate a single multiple-choice question based on the following text:{transcription_text}"}],
+        messages=[{"role":"user", "content":f"Generate a single multiple-choice question based on {transcription_text}"}],
         model="llama-3.3-70b-versatile",  # Use appropriate model
         temperature=0.7,
         max_tokens=150
     )
-    question = question_response.choices[0].message.content.strip()
+    question = question_response.choices[0].message.content
     print(question)
     
     # Step 2: Ask Groq to generate the answer for that question
@@ -119,13 +112,12 @@ def generate_mcq_one_by_one():
         temperature=0.7,
         max_tokens=150
     )
-    answer = answer_response.choices[0].message.content.strip()
+    answer = answer_response.choices[0].message.content
     print(answer)
     return question, answer
 
 @app.route("/end-quiz", methods=["POST"])
-def end_quiz():
-    global transcription_text
+def end_quiz(transcription_text):
     transcription_text = ""  # Clear the transcription when the user ends the quiz
     return jsonify({"message": "Quiz ended successfully"})
 
